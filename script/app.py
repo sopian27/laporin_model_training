@@ -23,18 +23,27 @@ def predict_endpoint():
         return jsonify({"error": "keluhan is required"}), 400
 
     # Ambil file image
-    file = request.files.get("image")
-    if not file:
+    files = request.files.getlist("image[]")
+    if not files:
         return jsonify({"error": "image file is required"}), 400
 
     try:
         text_result = predict_text(keluhan)
         #image_result = predict_image_file(tmp_path)
-        final_result = predict_full(text_result, file)
+        #final_result = predict_full(text_result, files)
+        image_results = []
+        for file in files:
+            result = predict_full(text_result, file)
+            image_results.append(result)
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    return jsonify(final_result)
+    #return jsonify(final_result)
+    return jsonify({
+        "text": text_result,
+        "images": image_results
+    })
 
 if __name__ == "__main__":
     # Run Flask langsung dari script
