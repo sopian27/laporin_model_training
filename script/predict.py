@@ -1,9 +1,7 @@
 from flask import Flask, request, jsonify
-import json
 import re
 import joblib
 import os
-from sklearn.feature_extraction.text import TfidfVectorizer
 
 # ===============================
 # LOAD MODEL
@@ -27,8 +25,30 @@ def clean_text(text):
     return text
 
 # ===============================
-# RULE-BASED SPAM KEYWORDS
+# VALID COMPLAINT KEYWORDS
+# (HARD OVERRIDE → NON-SPAM)
 # ===============================
+VALID_COMPLAINT_KEYWORDS = [
+    "jalan", "berlubang", "rusak", "retak", "ambles",
+    "lampu", "pju", "mati",
+    "banjir", "genangan", "drainase", "selokan",
+    "sampah", "bau", "liar",
+    "trotoar", "jembatan", "aspal",
+    "sekolah", "smp", "sd", "puskesmas",
+    "marka", "rambu",
+    "longsor", "irigasi", "saluran",
+    "fasilitas", "umum", "infrastruktur"
+]
+
+def rule_based_valid_complaint(text):
+    for k in VALID_COMPLAINT_KEYWORDS:
+        if k in text:
+            return True
+    return False
+
+# ---------------------------
+# Spam detection helper
+# ---------------------------
 promo_keywords = [
     # Promosi & Diskon
     "promo", "promosi", "diskon", "murah", "sale", "obral", "banting harga",
@@ -67,91 +87,122 @@ test_keywords = [
     # Testing & Acak
     "test", "coba", "asdf", "qwerty", "123", "cek", "testing", "uji coba", 
     "test 1", "testing 123", "coba input", "zxcv", "qwert", "abc", "def", 
-    "aaa", "bbb",
-
-    # Sapaan & Respon Sederhana
-    "halo", "hai", "oke", "ok", "??", "???", "!!!", "....", "..", 
-    "assalamualaikum", "wassalamualaikum", "met siang", "met malam", 
-    "terima kasih", "makasih", "sama-sama", "thanks", "siap", "ya", 
-    "gak", "sip", "mantap", "good", "iya", "tdk", "enggak"
+    "aaa", "bbb"
 ]
 
-nonsense_patterns = [
-    r"^[a-z]{1,3}\s*[0-9]{0,3}$",
-    r"^[0-9]{1,4}$",
-    r"^[a-zA-Z]{1,4}$"
+INDO_STOPWORDS = [
+    "yang","untuk","dengan","dan","di","ke","dari","ini","itu","atau","pada","karena",
+    "ada","adalah","saya","kami","kita","mereka","dia","akan","jika","tidak","jadi",
+    "sebagai","oleh","dalam","bagi","pada","agar","pun","juga","bahwa","atau","kamu"
 ]
 
-# ===============================
-# RULE-BASED SPAM DETECTOR
-# ===============================
-def rule_based_spam(text):
-    t = text.lower()
-    if any(kw in t for kw in promo_keywords):
-        return True
-    if len(t.split()) <= 2 and any(kw in t for kw in test_keywords):
-        return True
-    if len(t) <= 3:
-        return True
-    for pattern in nonsense_patterns:
-        if re.fullmatch(pattern, t):
-            return True
-    return False
+
+def detect_spam_rule(text: str) -> int:
+    if not isinstance(text, str):
+        return 0
+    t = text.lower().strip()
+    # very short/meaningless (<=3 words and very short length)
+    words = t.split()
+    if len(words) <= 3:
+        if re.fullmatch(r'[a-zA-Z]{1,5}', t) or len(t) <= 6:
+            return 1
+    # testing keywords
+    for k in test_keywords:
+        if k in t:
+            return 1
+    # promotional keywords
+    for k in promo_keywords:
+        if k in t:
+            return 1
+    # phone pattern (indication of contact/advertisement)
+    if re.search(r'0?8\d{6,12}', t):
+        return 1
+    # repeated characters or repeated words
+    if re.fullmatch(r'(.)\1{4,}', t):
+        return 1
+    words = t.split()
+    if len(words) >= 3 and len(set(words)) == 1:
+        return 1
+    return 0
 
 # ===============================
 # MAIN PREDICTION FUNCTION
 # ===============================
 def predict(text):
-    original = text
+    original_text = text
     text = clean_text(text)
 
-    if rule_based_spam(text):
+    # ===============================
+    # 1️⃣ HARD RULE: VALID COMPLAINT
+    # ===============================
+    if rule_based_valid_complaint(text):
+        X_prio = tfidf_priority.transform([text])
+        priority_pred = priority_model.predict(X_prio)[0]
+
         return {
-            "text": original,
+            "text": original_text,
+            "is_spam": 0,
+            "spam_confidence": 0.0,
+            "kategori": "Infrastruktur",
+            "prioritas": priority_pred
+        }
+
+    # ===============================
+    # 2️⃣ RULE-BASED SPAM
+    # ===============================
+    if detect_spam_rule(text) == 1:
+        return {
+            "text": original_text,
             "is_spam": 1,
             "spam_confidence": 1.0,
             "kategori": None,
             "prioritas": "Spam"
         }
 
+    # ===============================
+    # 3️⃣ MACHINE LEARNING (SVM)
+    # ===============================
     X_spam = tfidf_spam.transform([text])
     spam_proba = float(spam_model.predict_proba(X_spam)[0][1])
-    is_spam = 1 if spam_proba > 0.50 else 0
 
-    if is_spam:
+    if spam_proba > 0.5:
         return {
-            "text": original,
+            "text": original_text,
             "is_spam": 1,
             "spam_confidence": spam_proba,
             "kategori": None,
             "prioritas": "Spam"
         }
 
+    # ===============================
+    # 4️⃣ PRIORITY CLASSIFICATION
+    # ===============================
     X_prio = tfidf_priority.transform([text])
     priority_pred = priority_model.predict(X_prio)[0]
 
     return {
-        "text": original,
+        "text": original_text,
         "is_spam": 0,
         "spam_confidence": spam_proba,
         "kategori": None,
         "prioritas": priority_pred
     }
 
+
 # ===============================
 # FLASK API
 # ===============================
 app = Flask(__name__)
 
-@app.route('/predict', methods=['POST'])
+@app.route("/predict", methods=["POST"])
 def predict_api():
     data = request.json
-    text = data.get('text', '')
+    text = data.get("text", "")
+
     if not text:
         return jsonify({"error": "text is required"}), 400
 
-    result = predict(text)
-    return jsonify(result)
+    return jsonify(predict(text))
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)

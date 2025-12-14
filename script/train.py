@@ -64,13 +64,7 @@ test_keywords = [
     # Testing & Acak
     "test", "coba", "asdf", "qwerty", "123", "cek", "testing", "uji coba", 
     "test 1", "testing 123", "coba input", "zxcv", "qwert", "abc", "def", 
-    "aaa", "bbb",
-
-    # Sapaan & Respon Sederhana
-    "halo", "hai", "oke", "ok", "??", "???", "!!!", "....", "..", 
-    "assalamualaikum", "wassalamualaikum", "met siang", "met malam", 
-    "terima kasih", "makasih", "sama-sama", "thanks", "siap", "ya", 
-    "gak", "sip", "mantap", "good", "iya", "tdk", "enggak"
+    "aaa", "bbb"
 ]
 
 INDO_STOPWORDS = [

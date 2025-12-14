@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 # =========================
 # 1. KONFIGURASI
 # =========================
-FILE_INPUT = 'dataset/new-augmented_keluhan_masyarakat.xlsx'
+FILE_INPUT = '../dataset/new-augmented_keluhan_masyarakat.xlsx'
 SHEET_NAME = 0
 RANDOM_STATE = 42
 
@@ -53,27 +53,23 @@ df['teks_gabungan'] = df['topik_clean'] + ' ' + df['keluhan_clean']
 # =========================
 # 4. LABELING SPAM (RULE-BASED)
 # =========================
+# Keyword spam
 SPAM_KEYWORDS = [
-    # Promo / Penipuan
-    'promo', 'gratis', 'hadiah', 'diskon',
-    'pinjaman', 'judi', 'slot', 'deposit',
-    'investasi', 'cuan', 'bonus',
-    'klik', 'link', 'whatsapp', 'telegram',
-
-    # Test / Coba-coba
-    'test', 'testing', 'tes', 'coba',
-    'cek', 'percobaan',
-
-    # Kata Ngasal / Tidak Bermakna
-    'asdf', 'qwerty', 'zxcv',
-    'lorem', 'ipsum',
-
-    # Umum Spam Pendek
-    'hai', 'halo', 'bro', 'gan'
+    "promo", "diskon", "gratis", "penawaran", "hadiah", "voucher", 
+    "investasi", "binomo", "pinjol", "judi", "slot", "jackpot",
+    "klik link", "kode otp", "test", "coba", "asdf", "qwerty", "123"
 ]
 
 
 def assign_spam_label(text):
+    """
+    Memberi label spam 1, non-spam 0.
+    Menggunakan beberapa aturan:
+    1. Keyword spam
+    2. Panjang teks terlalu pendek
+    3. Karakter berulang
+    4. Dominasi karakter non-huruf
+    """
     text = str(text).lower().strip()
 
     # 1. Keyword spam
@@ -89,19 +85,16 @@ def assign_spam_label(text):
     if re.search(r'(.)\1{3,}', text):
         return 1
 
-    # 4. Huruf acak (tidak mengandung vokal)
-    if not re.search(r'[aiueo]', text) and len(text) > 6:
-        return 1
-
-    # 5. Dominasi karakter non-huruf
+    # 4. Dominasi karakter non-huruf (> 40%)
     non_alpha_ratio = len(re.findall(r'[^a-z\s]', text)) / max(len(text), 1)
-    if non_alpha_ratio > 0.3:
+    if non_alpha_ratio > 0.4:
         return 1
 
-    # 6. Banyak karakter acak
-    if re.fullmatch(r'[a-z]{6,}', text) and not re.search(r'[aiueo]', text):
+    # 5. Huruf acak tanpa vokal & panjang > 6
+    if len(text) > 6 and not re.search(r'[aiueo]', text):
         return 1
 
+    # 6. Default: non-spam
     return 0
 
 
@@ -231,10 +224,10 @@ print(classification_report(yp_test, yp_pred_svm))
 # =========================
 # 9. SIMPAN DATASET FINAL
 # =========================
-OUTPUT_FILE = "output/dataset_keluhan_spam_prioritas_labeled.xlsx"
-df.to_excel(OUTPUT_FILE, index=False)
+OUTPUT_FILE_CSV = "../output/dataset_keluhan_spam_prioritas_labeled.csv"
+df.to_csv(OUTPUT_FILE_CSV, index=False, encoding='utf-8-sig')
 
-print(f"\n✅ Dataset berlabel berhasil disimpan: {OUTPUT_FILE}")
+print(f"✅ Dataset berlabel berhasil disimpan sebagai CSV: {OUTPUT_FILE_CSV}")
 
 # --- Data dan prediksi sudah ada ---
 # ysp_test, ysp_pred_dt, ysp_pred_svm
